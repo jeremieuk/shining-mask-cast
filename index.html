@@ -26,7 +26,7 @@
   select { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
   summary { cursor:pointer; }
-  input[type=url] { flex:1; min-width:0; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
+  #url { flex:1; min-width:0; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
   #diag { font:11px ui-monospace, monospace; color:var(--muted); white-space:pre-wrap; word-break:break-all; max-height:320px; overflow:auto; margin:8px 0 0; }
   #log { font:12px ui-monospace, monospace; color:var(--muted); white-space:pre-wrap; max-height:140px; overflow:auto; }
 </style>
@@ -50,7 +50,8 @@
   <input id="file" type="file" accept="image/gif,image/*,video/*" hidden>
   <button id="pick" class="secondary">Choose GIF / video</button>
   <div class="row" style="margin-top:8px">
-    <input id="url" type="url" placeholder="...or paste a GIF / video link">
+    <input id="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="...or paste a GIF / video link">
+    <button id="pasteBtn" class="secondary" style="width:auto;margin:0">Paste</button>
     <button id="loadUrl" class="secondary" style="width:auto;margin:0">Load</button>
   </div>
   <canvas id="preview" width="588" height="732"></canvas>
