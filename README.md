@@ -14,11 +14,17 @@ Web Bluetooth works on `http://localhost` in desktop Chrome:
 
     python -m http.server 8000
 
-## First run: calibrate (config.js)
-1. Tap **Send calibration pattern**. Corners are red (top-left), green (top-right), blue (bottom-left) and white (bottom-right), with yellow row ticks on the left (long tick every 10 rows).
-2. If it looks wrong, adjust `WIDTH`, `HEIGHT`, `ORDER`, `FLIP_X` and `FLIP_Y`.
-3. Read the row of the bottom edge of the eye holes off the ticks and set `EYE_LINE_Y`.
+## First run: calibrate
+1. Tap **Connect to mask**, then **Send calibration pattern**. Corners are red (top-left), green (top-right), blue (bottom-left) and white (bottom-right), with yellow row ticks on the left (long tick every 10 rows) and a cyan line on the current eye line.
+2. Move the **Eye line** slider until the cyan line sits just under the eye holes (it is remembered on the phone), and send again to check. "Below the eyes" mode fits the picture under that line.
+3. Pixel order is column-major (`ORDER = 'cols'` in `config.js`), taken from the Bishop Fox face data. If a mask ever shows mirrored or rotated, adjust `ORDER`, `FLIP_X`, `FLIP_Y`.
 4. `SLOT_START` is the first DIY slot overwritten. Change it if you want to keep your existing DIY images.
+
+## Sources
+Pick a file, or paste a link. Giphy page links are converted to direct GIFs. Sites that block other apps from reading their images (CORS) won't load; download those and choose the file. Sharing a link to Mask Cast from Chrome also works.
+
+## Phone
+Use **Chrome** on Android. Samsung Internet shows no Bluetooth chooser; the app shows an "Open in Chrome" banner there. Turn on Bluetooth and Location, and allow Chrome the Location / Nearby devices permission.
 
 ## Limits
 - One loop holds at most 10 frames (`PLAY` command limit). Frames are picked evenly across the clip.

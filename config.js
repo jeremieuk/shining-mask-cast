@@ -1,8 +1,8 @@
-// Tunables. WIDTH/HEIGHT/ORDER/FLIP_* are inferred from the protocol docs and
-// must be confirmed with the test pattern on the real mask.
+// Tunables. Decoding the Bishop Fox face data shows the mask expects 46x58
+// pixels sent column by column (each column top to bottom, left column first).
 export const WIDTH = 46;
 export const HEIGHT = 58;
-export const ORDER = 'rows';   // 'rows' = row-major, 'cols' = column-major
+export const ORDER = 'cols';   // 'rows' = row-major, 'cols' = column-major
 export const FLIP_X = false;
 export const FLIP_Y = false;
 

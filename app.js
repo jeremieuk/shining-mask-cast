@@ -1,4 +1,4 @@
-import { WIDTH, HEIGHT, EYE_LINE_Y, SLOT_START } from './config.js';
+import { WIDTH, HEIGHT, SLOT_START } from './config.js';
 import { extractFrames } from './frames.js';
 import { renderFrame, toMaskBytes, testPattern } from './layout.js';
 import { MaskClient } from './mask.js';
@@ -50,6 +50,13 @@ let animTimer = null;
 let frameIdx = 0;
 
 const mode = () => document.querySelector('input[name=mode]:checked').value;
+const eyeLine = () => +$('eye').value;
+
+// Per-viewer convenience only; the app works without storage.
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+};
 
 function updateUi() {
   const name = mask.device?.name ?? 'unnamed';
@@ -77,14 +84,14 @@ function drawPreview() {
   pctx.strokeStyle = 'rgba(255,255,255,.5)';
   pctx.setLineDash([6, 6]);
   pctx.beginPath();
-  pctx.moveTo(0, EYE_LINE_Y * SCALE);
-  pctx.lineTo(WIDTH * SCALE, EYE_LINE_Y * SCALE);
+  pctx.moveTo(0, eyeLine() * SCALE);
+  pctx.lineTo(WIDTH * SCALE, eyeLine() * SCALE);
   pctx.stroke();
   frameIdx++;
 }
 
 function relayout() {
-  rendered = sources.map((s) => renderFrame(s, mode()));
+  rendered = sources.map((s) => renderFrame(s, mode(), eyeLine()));
   frameIdx = 0;
   clearInterval(animTimer);
   drawPreview();
@@ -109,14 +116,51 @@ async function loadFile(f) {
 async function connect(opts) {
   busy = true;
   updateUi();
+  let hintTimer;
+  if (!mask.known || opts?.acceptAll) {
+    log('Opening Bluetooth chooser...');
+    hintTimer = setTimeout(
+      () => log('Still no chooser. Use Chrome (not Samsung Internet), turn on Bluetooth and Location, and allow Chrome the Location / Nearby devices permission.'),
+      8000,
+    );
+  }
   try {
     await mask.connect(opts);
     log('Mask connected and verified');
   } catch (e) {
     log(explain(e));
   } finally {
+    clearTimeout(hintTimer);
     busy = false;
     updateUi();
+  }
+}
+
+// Giphy page links -> direct GIF; everything else is used as given.
+function normalizeUrl(raw) {
+  const u = raw.trim();
+  const g = u.match(/giphy\.com\/(?:gifs|stickers)\/(?:[^/?#]*-)?([A-Za-z0-9]+)/);
+  return g ? `https://i.giphy.com/${g[1]}.gif` : u;
+}
+
+async function loadUrl(raw) {
+  const url = normalizeUrl(raw);
+  if (!/^https?:\/\//i.test(url)) {
+    log('Enter a full link starting with http:// or https://');
+    return;
+  }
+  log(`Fetching ${url}`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (!/^(image|video)\//.test(blob.type)) throw new Error(`Not an image or video (${blob.type || 'unknown type'})`);
+    const name = url.split('?')[0].split('/').pop() || 'link';
+    await loadFile(new File([blob], name, { type: blob.type }));
+  } catch (e) {
+    log(e instanceof TypeError
+      ? "Couldn't read that link. The site probably blocks other apps from reading it. Try a Giphy or Imgur link, or download it and choose the file."
+      : `Error: ${e.message}`);
   }
 }
 
@@ -160,8 +204,17 @@ $('frames').onchange = () => file && loadFile(file);
 $('bright').oninput = () => {
   $('bVal').textContent = $('bright').value;
 };
+$('eye').value = store.get('eyeLine') ?? $('eye').value;
+$('eyeVal').textContent = $('eye').value;
+$('eye').oninput = () => {
+  $('eyeVal').textContent = $('eye').value;
+  store.set('eyeLine', $('eye').value);
+  relayout();
+};
+$('loadUrl').onclick = () => loadUrl($('url').value);
+$('url').onkeydown = (e) => e.key === 'Enter' && loadUrl($('url').value);
 $('send').onclick = () => sendImages(rendered);
-$('test').onclick = () => sendImages([testPattern()]);
+$('test').onclick = () => sendImages([testPattern(eyeLine())]);
 $('copy').onclick = async () => {
   try {
     await navigator.clipboard.writeText(traceLines.join('\n'));
@@ -181,6 +234,20 @@ $('copy').onclick = async () => {
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch((e) => log(`SW: ${e.message}`));
+}
+
+// Samsung Internet and other non-Chrome Android browsers expose Web Bluetooth
+// but never show the chooser.
+if (/Android/.test(navigator.userAgent) && /SamsungBrowser|EdgA|OPR\/|Firefox|DuckDuckGo|MiuiBrowser|UCBrowser/.test(navigator.userAgent)) {
+  $('chromeLink').href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+  $('browserBanner').hidden = false;
+}
+
+// Opened via Share with a link: the service worker passed it along.
+const sharedUrl = new URLSearchParams(location.search).get('sharedUrl');
+if (sharedUrl) {
+  $('url').value = sharedUrl;
+  loadUrl(sharedUrl).then(() => history.replaceState(null, '', location.pathname));
 }
 
 // Opened via Android's Share menu: the service worker stashed the file.
