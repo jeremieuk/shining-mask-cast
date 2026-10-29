@@ -1,10 +1,10 @@
 import { WIDTH, HEIGHT, SLOT_START, APP_VERSION, EYE_LINE_Y } from './config.js';
 import { extractFrames } from './frames.js';
 import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT } from './layout.js';
+import { renderMaskPreview, PREVIEW_W, PREVIEW_H, CELL, PAD } from './preview.js';
 import { MaskClient } from './mask.js';
 
 const $ = (id) => document.getElementById(id);
-const SCALE = 8;
 const MAX_TRACE = 500;
 
 // Diagnostics log: every line is timestamped and can be copied out.
@@ -60,7 +60,7 @@ const store = {
 };
 
 // Pixel order / flips / colour order used when sending (saved on this device).
-const layoutCfg = { ...DEFAULT_LAYOUT };
+const layoutCfg = { ...DEFAULT_LAYOUT, gamma: 1.8 };
 try {
   Object.assign(layoutCfg, JSON.parse(store.get('layout') ?? '{}'));
 } catch { /* ignore a corrupt saved value */ }
@@ -81,25 +81,52 @@ const small = document.createElement('canvas');
 small.width = WIDTH;
 small.height = HEIGHT;
 const smallCtx = small.getContext('2d');
-const pctx = $('preview').getContext('2d');
+const preview = $('preview');
+preview.width = PREVIEW_W;
+preview.height = PREVIEW_H;
+const pctx = preview.getContext('2d');
 pctx.imageSmoothingEnabled = false;
+
+const previewStyle = () => $('style').value;
+
+function blankImage() {
+  const img = new ImageData(WIDTH, HEIGHT);
+  for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+  return img;
+}
 
 function drawPreview() {
   if (!rendered.length) return;
-  smallCtx.putImageData(rendered[frameIdx % rendered.length], 0, 0);
-  pctx.drawImage(small, 0, 0, WIDTH * SCALE, HEIGHT * SCALE);
-  pctx.strokeStyle = 'rgba(255,255,255,.5)';
-  pctx.setLineDash([6, 6]);
+  const img = rendered[frameIdx % rendered.length];
+  pctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
+  if (previewStyle() === 'mask') {
+    pctx.putImageData(renderMaskPreview(img, { gamma: layoutCfg.gamma }), 0, 0);
+  } else {
+    smallCtx.putImageData(img, 0, 0);
+    pctx.fillStyle = '#000';
+    pctx.fillRect(PAD, PAD, WIDTH * CELL, HEIGHT * CELL);
+    pctx.drawImage(small, PAD, PAD, WIDTH * CELL, HEIGHT * CELL);
+  }
+  // Top edge of "Below the eyes" mode.
+  const y = PAD + eyeLine() * CELL;
+  pctx.strokeStyle = 'rgba(255,255,255,.55)';
+  pctx.setLineDash([8, 6]);
   pctx.beginPath();
-  pctx.moveTo(0, eyeLine() * SCALE);
-  pctx.lineTo(WIDTH * SCALE, eyeLine() * SCALE);
+  pctx.moveTo(PAD, y);
+  pctx.lineTo(PAD + WIDTH * CELL, y);
   pctx.stroke();
   frameIdx++;
 }
 
+// Re-draw the current frame after a setting changes.
+function redraw() {
+  frameIdx = Math.max(0, frameIdx - 1);
+  drawPreview();
+}
+
 function relayout() {
   showing = 'file';
-  rendered = sources.map((s) => renderFrame(s, mode(), eyeLine()));
+  rendered = sources.length ? sources.map((s) => renderFrame(s, mode(), eyeLine())) : [blankImage()];
   frameIdx = 0;
   clearInterval(animTimer);
   drawPreview();
@@ -237,15 +264,28 @@ $('order').value = layoutCfg.order;
 $('flipX').checked = layoutCfg.flipX;
 $('flipY').checked = layoutCfg.flipY;
 $('colors').value = layoutCfg.colors;
+$('gamma').value = layoutCfg.gamma;
+$('gVal').textContent = Number($('gamma').value).toFixed(1);
+$('style').value = store.get('previewStyle') ?? 'mask';
 const saveLayout = () => {
   layoutCfg.order = $('order').value;
   layoutCfg.flipX = $('flipX').checked;
   layoutCfg.flipY = $('flipY').checked;
   layoutCfg.colors = $('colors').value;
+  layoutCfg.gamma = +$('gamma').value;
   store.set('layout', JSON.stringify(layoutCfg));
   trace('i', `layout: ${JSON.stringify(layoutCfg)}`);
 };
 ['order', 'flipX', 'flipY', 'colors'].forEach((id) => ($(id).onchange = saveLayout));
+$('gamma').oninput = () => {
+  $('gVal').textContent = Number($('gamma').value).toFixed(1);
+  saveLayout();
+  redraw();
+};
+$('style').onchange = () => {
+  store.set('previewStyle', $('style').value);
+  redraw();
+};
 $('pattern').onchange = showPattern;
 $('loadUrl').onclick = () => loadUrl($('url').value);
 $('url').onkeydown = (e) => e.key === 'Enter' && loadUrl($('url').value);
@@ -310,4 +350,5 @@ if (new URLSearchParams(location.search).has('shared')) {
   })();
 }
 
+relayout(); // shows the empty mask until something is loaded
 updateUi();

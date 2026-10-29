@@ -8,7 +8,15 @@ ctx.imageSmoothingQuality = 'high';
 
 // How pixels are serialised for the mask. Adjustable in the UI to compensate
 // for mirrored / upside-down / wrong-colour output.
-export const DEFAULT_LAYOUT = { order: ORDER, flipX: FLIP_X, flipY: FLIP_Y, colors: 'RGB' };
+export const DEFAULT_LAYOUT = { order: ORDER, flipX: FLIP_X, flipY: FLIP_Y, colors: 'RGB', gamma: 1 };
+
+// LEDs emit light linearly in the data value, but pictures are gamma-encoded, so
+// mid-tones come out too bright and contrast flattens. gamma > 1 compensates.
+export function gammaLut(gamma = 1) {
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * (v / 255) ** gamma);
+  return lut;
+}
 
 // mode 'full'  : cover the whole grid (crops overflow; eye-hole pixels are lost)
 // mode 'below' : contain inside the area under the eye line
@@ -37,13 +45,14 @@ export function renderFrame(src, mode, eyeLine = EYE_LINE_Y) {
 // the mask receives its channels in (e.g. 'BGR' sends blue first).
 export function toMaskBytes(img, cfg = DEFAULT_LAYOUT) {
   const channels = [...cfg.colors].map((c) => 'RGB'.indexOf(c));
+  const lut = gammaLut(cfg.gamma ?? 1);
   const out = new Uint8Array(WIDTH * HEIGHT * 3);
   let o = 0;
   const px = (x, y) => {
     const sx = cfg.flipX ? WIDTH - 1 - x : x;
     const sy = cfg.flipY ? HEIGHT - 1 - y : y;
     const i = (sy * WIDTH + sx) * 4;
-    for (const c of channels) out[o++] = img.data[i + c];
+    for (const c of channels) out[o++] = lut[img.data[i + c]];
   };
   if (cfg.order === 'cols') {
     for (let x = 0; x < WIDTH; x++) for (let y = 0; y < HEIGHT; y++) px(x, y);
