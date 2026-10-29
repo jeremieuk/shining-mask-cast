@@ -1,4 +1,4 @@
-import { WIDTH, HEIGHT, SLOT_START, APP_VERSION } from './config.js';
+import { WIDTH, HEIGHT, SLOT_START, APP_VERSION, EYE_LINE_Y } from './config.js';
 import { extractFrames } from './frames.js';
 import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT } from './layout.js';
 import { MaskClient } from './mask.js';
@@ -223,11 +223,11 @@ $('frames').onchange = () => file && loadFile(file);
 $('bright').oninput = () => {
   $('bVal').textContent = $('bright').value;
 };
-$('eye').value = store.get('eyeLine') ?? $('eye').value;
+$('eye').value = store.get('eyeLineRow') ?? EYE_LINE_Y;
 $('eyeVal').textContent = $('eye').value;
 $('eye').oninput = () => {
   $('eyeVal').textContent = $('eye').value;
-  store.set('eyeLine', $('eye').value);
+  store.set('eyeLineRow', $('eye').value);
   if (showing === 'pattern') showPattern();
   else relayout();
 };
