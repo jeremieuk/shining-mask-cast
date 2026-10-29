@@ -5,14 +5,44 @@ import { MaskClient } from './mask.js';
 
 const $ = (id) => document.getElementById(id);
 const SCALE = 8;
+const MAX_TRACE = 500;
 
+// Diagnostics log: every line is timestamped and can be copied out.
+const traceLines = [];
+function trace(dir, text) {
+  const t = new Date();
+  const ts = `${t.toTimeString().slice(0, 8)}.${String(t.getMilliseconds()).padStart(3, '0')}`;
+  traceLines.push(`${ts} ${dir} ${text}`);
+  if (traceLines.length > MAX_TRACE) traceLines.shift();
+  const el = $('diag');
+  el.textContent = traceLines.join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+// User-facing messages (also recorded in the diagnostics log).
 function log(msg) {
   const el = $('log');
   el.textContent += `${msg}\n`;
   el.scrollTop = el.scrollHeight;
+  trace('i', msg.replace(/\n\s*/g, ' '));
 }
 
-const mask = new MaskClient(log);
+const HINTS = {
+  NotFoundError: 'No device was chosen or none was found. Make sure the mask is on and close the Shining app, then try again.',
+  SecurityError: 'Bluetooth was blocked. It needs HTTPS and a tap on the button.',
+  NetworkError: 'Could not connect: the mask is out of range, or another phone/app is already connected to it.',
+  NotSupportedError: 'This browser or phone does not support that Bluetooth operation.',
+  InvalidStateError: 'Bluetooth is in an unexpected state. Toggle Bluetooth off and on.',
+  NotMaskError: 'The device you picked is not a Shining mask. Nothing was sent to it.',
+};
+
+function explain(e) {
+  const hint = HINTS[e.name];
+  return `${e.name}: ${e.message}${hint ? `\nHint: ${hint}` : ''}`;
+}
+
+let busy = false;
+const mask = new MaskClient({ trace, onState: updateUi });
 let file = null;
 let sources = [];
 let rendered = [];
@@ -20,6 +50,18 @@ let animTimer = null;
 let frameIdx = 0;
 
 const mode = () => document.querySelector('input[name=mode]:checked').value;
+
+function updateUi() {
+  const name = mask.device?.name ?? 'unnamed';
+  $('status').textContent = mask.ready
+    ? `✅ Mask verified: ${name}`
+    : mask.known
+      ? `Mask ${name} verified earlier (disconnected, reconnects on send)`
+      : 'Not connected';
+  $('send').disabled = busy || !mask.known || !sources.length;
+  $('test').disabled = busy || !mask.known;
+  $('connect').disabled = $('scanAll').disabled = busy;
+}
 
 const small = document.createElement('canvas');
 small.width = WIDTH;
@@ -51,15 +93,30 @@ function relayout() {
 
 async function loadFile(f) {
   file = f;
+  sources = [];
   $('name').textContent = f.name || f.type;
-  $('send').disabled = true;
+  updateUi();
   try {
     sources = await extractFrames(f, +$('frames').value);
     log(`Loaded ${sources.length} frame(s)`);
     relayout();
-    $('send').disabled = false;
   } catch (e) {
     log(`Error: ${e.message}`);
+  }
+  updateUi();
+}
+
+async function connect(opts) {
+  busy = true;
+  updateUi();
+  try {
+    await mask.connect(opts);
+    log('Mask connected and verified');
+  } catch (e) {
+    log(explain(e));
+  } finally {
+    busy = false;
+    updateUi();
   }
 }
 
@@ -67,9 +124,10 @@ async function sendImages(imgs) {
   const prog = $('prog');
   prog.hidden = false;
   prog.value = 0;
-  $('send').disabled = $('test').disabled = true;
+  busy = true;
+  updateUi();
   try {
-    await mask.connect();
+    await mask.ensureConnected(); // only ever reconnects the already-verified mask
     await mask.setLight(+$('bright').value);
     const slots = imgs.map((_, i) => SLOT_START + i);
     for (let i = 0; i < imgs.length; i++) {
@@ -81,15 +139,17 @@ async function sendImages(imgs) {
     await mask.play(slots);
     log('Playing on mask');
   } catch (e) {
-    log(`Error: ${e.message}`);
+    log(explain(e));
   } finally {
     if (!$('stay').checked) mask.disconnect();
     prog.hidden = true;
-    $('test').disabled = false;
-    $('send').disabled = !file;
+    busy = false;
+    updateUi();
   }
 }
 
+$('connect').onclick = () => connect();
+$('scanAll').onclick = () => connect({ acceptAll: true });
 $('pick').onclick = () => $('file').click();
 $('file').onchange = (e) => e.target.files[0] && loadFile(e.target.files[0]);
 document.querySelectorAll('input[name=mode]').forEach((r) => (r.onchange = relayout));
@@ -102,6 +162,22 @@ $('bright').oninput = () => {
 };
 $('send').onclick = () => sendImages(rendered);
 $('test').onclick = () => sendImages([testPattern()]);
+$('copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(traceLines.join('\n'));
+    log('Diagnostics log copied');
+  } catch {
+    log('Could not copy automatically; select the text in Diagnostics instead');
+  }
+};
+
+(async function logEnvironment() {
+  trace('env', `secureContext=${isSecureContext} webBluetooth=${!!navigator.bluetooth}`);
+  try {
+    trace('env', `bluetooth available=${await navigator.bluetooth.getAvailability()}`);
+  } catch { /* not supported */ }
+  trace('env', navigator.userAgent);
+})();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch((e) => log(`SW: ${e.message}`));
@@ -116,7 +192,7 @@ if (new URLSearchParams(location.search).has('shared')) {
       if (res) {
         const blob = await res.blob();
         await loadFile(new File([blob], 'shared', { type: blob.type }));
-        log('Shared file ready. Tap Send.');
+        log('Shared file ready. Connect to your mask, then tap Send.');
       }
     } catch (e) {
       log(`Share error: ${e.message}`);
@@ -124,3 +200,5 @@ if (new URLSearchParams(location.search).has('shared')) {
     history.replaceState(null, '', location.pathname);
   })();
 }
+
+updateUi();

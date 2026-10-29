@@ -1,5 +1,5 @@
 // Bump CACHE when app files change so installed copies pick up the update.
-const CACHE = 'mask-cast-v1';
+const CACHE = 'mask-cast-v2';
 const SHARE_CACHE = 'mask-cast-share';
 const ASSETS = [
   './', './index.html', './app.js', './config.js', './frames.js', './layout.js',
