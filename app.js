@@ -1,6 +1,6 @@
-import { WIDTH, HEIGHT, SLOT_START } from './config.js';
+import { WIDTH, HEIGHT, SLOT_START, APP_VERSION } from './config.js';
 import { extractFrames } from './frames.js';
-import { renderFrame, toMaskBytes, testPattern } from './layout.js';
+import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT } from './layout.js';
 import { MaskClient } from './mask.js';
 
 const $ = (id) => document.getElementById(id);
@@ -48,6 +48,7 @@ let sources = [];
 let rendered = [];
 let animTimer = null;
 let frameIdx = 0;
+let showing = 'file'; // what the preview currently shows: 'file' or 'pattern'
 
 const mode = () => document.querySelector('input[name=mode]:checked').value;
 const eyeLine = () => +$('eye').value;
@@ -57,6 +58,12 @@ const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
 };
+
+// Pixel order / flips / colour order used when sending (saved on this device).
+const layoutCfg = { ...DEFAULT_LAYOUT };
+try {
+  Object.assign(layoutCfg, JSON.parse(store.get('layout') ?? '{}'));
+} catch { /* ignore a corrupt saved value */ }
 
 function updateUi() {
   const name = mask.device?.name ?? 'unnamed';
@@ -91,11 +98,23 @@ function drawPreview() {
 }
 
 function relayout() {
+  showing = 'file';
   rendered = sources.map((s) => renderFrame(s, mode(), eyeLine()));
   frameIdx = 0;
   clearInterval(animTimer);
   drawPreview();
   if (rendered.length > 1) animTimer = setInterval(drawPreview, 250);
+}
+
+const currentPattern = () => calibrationPattern($('pattern').value, eyeLine());
+
+// Shows the chosen calibration pattern as it should look on the mask.
+function showPattern() {
+  showing = 'pattern';
+  clearInterval(animTimer);
+  rendered = [currentPattern()];
+  frameIdx = 0;
+  drawPreview();
 }
 
 async function loadFile(f) {
@@ -176,7 +195,7 @@ async function sendImages(imgs) {
     const slots = imgs.map((_, i) => SLOT_START + i);
     for (let i = 0; i < imgs.length; i++) {
       log(`Uploading frame ${i + 1}/${imgs.length}`);
-      await mask.uploadImage(slots[i], toMaskBytes(imgs[i]), (p) => {
+      await mask.uploadImage(slots[i], toMaskBytes(imgs[i], layoutCfg), (p) => {
         prog.value = (i + p) / imgs.length;
       });
     }
@@ -209,12 +228,32 @@ $('eyeVal').textContent = $('eye').value;
 $('eye').oninput = () => {
   $('eyeVal').textContent = $('eye').value;
   store.set('eyeLine', $('eye').value);
-  relayout();
+  if (showing === 'pattern') showPattern();
+  else relayout();
 };
+
+// Mask layout controls: reflect the saved values, and save on change.
+$('order').value = layoutCfg.order;
+$('flipX').checked = layoutCfg.flipX;
+$('flipY').checked = layoutCfg.flipY;
+$('colors').value = layoutCfg.colors;
+const saveLayout = () => {
+  layoutCfg.order = $('order').value;
+  layoutCfg.flipX = $('flipX').checked;
+  layoutCfg.flipY = $('flipY').checked;
+  layoutCfg.colors = $('colors').value;
+  store.set('layout', JSON.stringify(layoutCfg));
+  trace('i', `layout: ${JSON.stringify(layoutCfg)}`);
+};
+['order', 'flipX', 'flipY', 'colors'].forEach((id) => ($(id).onchange = saveLayout));
+$('pattern').onchange = showPattern;
 $('loadUrl').onclick = () => loadUrl($('url').value);
 $('url').onkeydown = (e) => e.key === 'Enter' && loadUrl($('url').value);
-$('send').onclick = () => sendImages(rendered);
-$('test').onclick = () => sendImages([testPattern(eyeLine())]);
+$('send').onclick = () => sendImages(sources.map((s) => renderFrame(s, mode(), eyeLine())));
+$('test').onclick = () => {
+  showPattern();
+  sendImages([currentPattern()]);
+};
 $('copy').onclick = async () => {
   try {
     await navigator.clipboard.writeText(traceLines.join('\n'));
@@ -224,7 +263,10 @@ $('copy').onclick = async () => {
   }
 };
 
+$('ver').textContent = APP_VERSION;
+
 (async function logEnvironment() {
+  trace('env', `Mask Cast ${APP_VERSION} layout=${JSON.stringify(layoutCfg)}`);
   trace('env', `secureContext=${isSecureContext} webBluetooth=${!!navigator.bluetooth}`);
   try {
     trace('env', `bluetooth available=${await navigator.bluetooth.getAvailability()}`);

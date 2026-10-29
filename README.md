@@ -15,10 +15,16 @@ Web Bluetooth works on `http://localhost` in desktop Chrome:
     python -m http.server 8000
 
 ## First run: calibrate
-1. Tap **Connect to mask**, then **Send calibration pattern**. Corners are red (top-left), green (top-right), blue (bottom-left) and white (bottom-right), with yellow row ticks on the left (long tick every 10 rows) and a cyan line on the current eye line.
-2. Move the **Eye line** slider until the cyan line sits just under the eye holes (it is remembered on the phone), and send again to check. "Below the eyes" mode fits the picture under that line.
-3. Pixel order is column-major (`ORDER = 'cols'` in `config.js`), taken from the Bishop Fox face data. If a mask ever shows mirrored or rotated, adjust `ORDER`, `FLIP_X`, `FLIP_Y`.
-4. `SLOT_START` is the first DIY slot overwritten. Change it if you want to keep your existing DIY images.
+Tap **Connect to mask**, lower brightness to about 20, and photograph from a bit further away (close-ups of the dot grid saturate and show banding). The preview shows what the mask should display, seen from outside.
+
+1. Pick **Orientation (big F)** and **Send pattern**. A correct result is a normal, readable F with a red vertical line on its left and a blue horizontal line above it.
+2. If it differs, open **Mask layout** and fix it: mirrored → Flip left↔right; upside down → Flip top↔bottom; wrong colours → change Colour order. Resend until it matches the preview. The settings are saved on the phone.
+3. **Column colour bars** (red, green, blue from the left) and **Row colour bars** (red, green, blue from the top) confirm the axes.
+4. **Rings** shows how much of the 46x58 grid the oval cut-off hides.
+5. **Eye line** draws a cyan line plus a ruler; move the **Eye line** slider until the line sits just under the eye holes. "Below the eyes" mode fits the picture under that line.
+6. `SLOT_START` in `config.js` is the first DIY slot overwritten. Change it to keep your existing DIY images.
+
+The pixel format (46x58, column by column, left column first) was decoded from the Bishop Fox face data; the layout defaults come from `config.js`.
 
 ## Sources
 Pick a file, or paste a link. Giphy page links are converted to direct GIFs. Sites that block other apps from reading their images (CORS) won't load; download those and choose the file. Sharing a link to Mask Cast from Chrome also works.

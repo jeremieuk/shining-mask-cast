@@ -1,3 +1,5 @@
+export const APP_VERSION = 'v4';
+
 // Tunables. Decoding the Bishop Fox face data shows the mask expects 46x58
 // pixels sent column by column (each column top to bottom, left column first).
 export const WIDTH = 46;

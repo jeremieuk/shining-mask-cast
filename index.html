@@ -23,13 +23,16 @@
   progress { width:100%; }
   #status { font-weight:600; }
   #browserBanner a { color:var(--accent); }
+  select { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
+  .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
+  summary { cursor:pointer; }
   input[type=url] { flex:1; min-width:0; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
   #diag { font:11px ui-monospace, monospace; color:var(--muted); white-space:pre-wrap; word-break:break-all; max-height:320px; overflow:auto; margin:8px 0 0; }
   #log { font:12px ui-monospace, monospace; color:var(--muted); white-space:pre-wrap; max-height:140px; overflow:auto; }
 </style>
 </head>
 <body>
-<h1>Mask Cast</h1>
+<h1>Mask Cast <small id="ver" style="color:var(--muted);font-size:12px"></small></h1>
 
 <div id="browserBanner" class="card" hidden>
   <strong>Bluetooth only works in Chrome.</strong> This browser can't talk to the mask.
@@ -69,8 +72,41 @@
 </div>
 
 <button id="send" disabled>Send to mask</button>
-<button id="test" class="secondary" disabled>Send calibration pattern</button>
 <progress id="prog" value="0" max="1" hidden></progress>
+
+<div class="card" style="margin-top:12px">
+  <label>Calibration pattern</label>
+  <select id="pattern">
+    <option value="orient">Orientation (big F)</option>
+    <option value="cols">Column colour bars</option>
+    <option value="rows">Row colour bars</option>
+    <option value="rings">Rings (what is visible)</option>
+    <option value="eye">Eye line</option>
+  </select>
+  <button id="test" class="secondary" disabled>Send pattern</button>
+  <p class="hint">The preview above is what the mask should show, seen from outside. Lower the brightness to about 20 and photograph from a bit further away to avoid glare and banding.</p>
+</div>
+
+<details class="card">
+  <summary>Mask layout (fix mirrored, upside-down or wrong colours)</summary>
+  <label>Pixel order</label>
+  <select id="order">
+    <option value="cols">Columns (default)</option>
+    <option value="rows">Rows</option>
+  </select>
+  <label class="row"><input id="flipX" type="checkbox"> Flip left &harr; right</label>
+  <label class="row"><input id="flipY" type="checkbox"> Flip top &harr; bottom</label>
+  <label>Colour order</label>
+  <select id="colors">
+    <option value="RGB">RGB (default)</option>
+    <option value="RBG">RBG</option>
+    <option value="GRB">GRB</option>
+    <option value="GBR">GBR</option>
+    <option value="BRG">BRG</option>
+    <option value="BGR">BGR</option>
+  </select>
+  <p class="hint">Send the F pattern, then fix what you see: mirrored &rarr; flip left&harr;right; upside down &rarr; flip top&harr;bottom; wrong colours &rarr; change colour order. Resend until it matches the preview. Saved on this device.</p>
+</details>
 
 <div class="card" style="margin-top:12px"><div id="log"></div></div>
 
