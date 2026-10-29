@@ -282,7 +282,14 @@ $('style').onchange = () => {
 };
 $('pattern').onchange = showPattern;
 $('loadUrl').onclick = () => loadUrl($('url').value);
-$('url').onkeydown = (e) => e.key === 'Enter' && loadUrl($('url').value);
+// Not `onkeydown = (e) => e.key === 'Enter' && ...`: an on* handler that returns
+// false cancels the keystroke, which blocked typing, deleting and Ctrl+V.
+$('url').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadUrl($('url').value);
+  }
+});
 
 // Pasting: a copied image/GIF file, or text containing a link. Pasting a copied
 // picture puts pixels on the clipboard (not a link), which a text box ignores
@@ -318,23 +325,6 @@ document.addEventListener('paste', (e) => {
     log('Clipboard has no link, image or video');
   } // else: let a normal paste into the box happen
 });
-
-$('pasteBtn').onclick = async () => {
-  try {
-    if (navigator.clipboard.read) {
-      const items = await navigator.clipboard.read();
-      trace('paste', `button items=[${items.map((i) => i.types.join('|')).join(', ')}]`);
-      for (const item of items) {
-        const type = item.types.find((t) => /^(image|video)\//.test(t));
-        if (type) return await usePastedFile(new File([await item.getType(type)], 'pasted', { type }));
-      }
-    }
-    if (usePastedText(await navigator.clipboard.readText())) return;
-    log('Clipboard has no link, image or video');
-  } catch (e) {
-    log(`Could not read the clipboard (${e.name}). Allow clipboard access for this site, or long-press the box and choose Paste.`);
-  }
-};
 $('send').onclick = () => sendImages(sources.map((s) => renderFrame(s, mode(), eyeLine())));
 $('test').onclick = () => {
   showPattern();
