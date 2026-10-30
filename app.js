@@ -3,8 +3,8 @@ import { extractFrames } from './frames.js';
 import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT, DEFAULT_VIEW } from './layout.js';
 import { renderMaskPreview, PREVIEW_W, PREVIEW_H, CELL, PAD } from './preview.js';
 import { MaskClient } from './mask.js';
-import { extractUrl, normalizeUrl } from './link.js';
-import { fetchBlob, LoadError, mb } from './net.js';
+import { extractUrl, normalizeUrl, pickClipboardContent } from './link.js';
+import { fetchBlob, LoadError, mb, withTimeout } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_TRACE = 500;
@@ -399,14 +399,14 @@ $('style').onchange = () => {
 $('pattern').onchange = showPattern;
 $('loadUrl').onclick = () => {
   if (loadCtl) loadCtl.abort(); // the button reads "Cancel" while a load is running
-  else loadUrl($('url').value);
+  else loadFromBox();
 };
 // Not `onkeydown = (e) => e.key === 'Enter' && ...`: an on* handler that returns
 // false cancels the keystroke, which blocked typing, deleting and Ctrl+V.
 $('url').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    loadUrl($('url').value);
+    loadFromBox();
   }
 });
 
@@ -427,6 +427,41 @@ function usePastedText(text) {
   $('url').value = link;
   loadUrl(link);
   return true;
+}
+
+// What the clipboard holds that we can load ({ file } or { text }), or null. Chrome
+// asks permission the first time; the deadline stops an ignored prompt from hanging Load.
+async function readClipboard() {
+  try {
+    if (navigator.clipboard?.read) {
+      return await withTimeout(navigator.clipboard.read().then(pickClipboardContent), 10000, 'The clipboard did not respond');
+    }
+    if (navigator.clipboard?.readText) {
+      const text = await withTimeout(navigator.clipboard.readText(), 10000, 'The clipboard did not respond');
+      return extractUrl(text) ? { text } : null;
+    }
+  } catch (e) {
+    trace('paste', `clipboard unavailable: ${e.name}: ${e.message}`);
+  }
+  return null;
+}
+
+// Load with an empty box means "load what I have": whatever is on the clipboard
+// (an image or a link), else the picture that is already open, else say what to do.
+async function loadWhatIHave() {
+  loadStatus('Checking the clipboard…');
+  const found = await readClipboard();
+  if (found?.file) return usePastedFile(found.file);
+  if (found?.text && usePastedText(found.text)) return undefined;
+  if (file) return loadFile(file);
+  loadStatus('Paste a link or an image first (Ctrl+V), or choose a file', 'error');
+  return undefined;
+}
+
+// A link in the box always wins; the clipboard is only consulted when it is empty.
+function loadFromBox() {
+  const text = $('url').value.trim();
+  return text ? loadUrl(text) : loadWhatIHave();
 }
 
 document.addEventListener('paste', (e) => {

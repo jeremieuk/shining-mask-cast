@@ -35,7 +35,7 @@ The preview is drawn like the mask itself: round LED dots on a black face plate,
 Under the preview, **Size**, **Left ↔ right** and **Up ↕ down** frame the picture on the mask (100% fills the area; positions are in mask pixels, positive = right / down as seen from outside). In *Below the eyes* mode the picture is always clipped to the area under the eye line, however you move or enlarge it. The framing resets when you load a new picture, and **Reset position & size** puts it back.
 
 ## Sources
-Pick a file, or paste a link. Giphy page links are converted to direct GIFs. Sites that block other apps from reading their images (CORS) won't load; download those and choose the file. Sharing a link to Mask Cast from Chrome also works.
+Pick a file, paste a link, or copy an image and press **Load** with the box empty (the first time, Chrome asks to let the site see your clipboard; if you decline, Load simply reloads the picture that is already open). Ctrl+V of an image or link anywhere on the page also loads it. Giphy page links are converted to direct GIFs. Sites that block other apps from reading their images (CORS) won't load; download those and choose the file. Sharing a link to Mask Cast from Chrome also works.
 
 ## Phone
 Use **Chrome** on Android. Samsung Internet shows no Bluetooth chooser; the app shows an "Open in Chrome" banner there. Turn on Bluetooth and Location, and allow Chrome the Location / Nearby devices permission.
