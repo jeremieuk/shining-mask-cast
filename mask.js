@@ -7,11 +7,33 @@ const VERIFY_TIMEOUT = 2000;
 const hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join(' ');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const STALL_MISSES = 2; // consecutive missing packet acks (about 1 s each) before giving up
+
 // Thrown when a connected device turns out not to be a Shining mask.
 export class NotMaskError extends Error {
   constructor(msg) {
     super(msg);
     this.name = 'NotMaskError';
+  }
+}
+
+// The device is a mask (named MASK-..., right service and characteristics) but it
+// connects and then never answers: its processor has most likely hung.
+export class MaskNotRespondingError extends Error {
+  constructor(name) {
+    super(`Connected to ${name || 'the mask'}, but it isn't answering. It may have hung after an interrupted upload. ` +
+      'Switch it off for a minute (or put it on a charger for a minute), switch it on and try again. Only a status query was sent.');
+    this.name = 'MaskNotRespondingError';
+    this.userFacing = true; // the message already says what to do
+  }
+}
+
+// The mask stopped acknowledging an upload part-way through, or disconnected.
+export class MaskStalledError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'MaskStalledError';
+    this.userFacing = true;
   }
 }
 
@@ -185,6 +207,9 @@ export class MaskClient {
     try {
       await this.waitFor('', VERIFY_TIMEOUT);
     } catch {
+      // The service and all three vendor characteristics exist. A device named MASK-...
+      // is a mask that isn't answering; anything else just doesn't speak the protocol.
+      if (this.device.name?.startsWith(NAME_PREFIX)) throw new MaskNotRespondingError(this.device.name);
       throw new NotMaskError('no valid reply to the CHEC query (device does not speak the mask protocol)');
     }
   }
@@ -248,14 +273,29 @@ export class MaskClient {
     return this.cmd('PLAY', [slots.length, ...slots]);
   }
 
-  async uploadImage(slot, rgb, onProgress = () => {}) {
+  // Shows one of the mask's built-in pictures (so no DIY slot is being displayed).
+  showBuiltIn(id) {
+    return this.cmd('IMAG', [id]);
+  }
+
+  // ctx = { frame, frames } only labels error messages ("frame 8 of 10").
+  async uploadImage(slot, rgb, onProgress = () => {}, ctx = {}) {
     const total = rgb.length;
+    const where = ctx.frame ? ` (frame ${ctx.frame} of ${ctx.frames})` : '';
+    const stalled = (what) => new MaskStalledError(
+      `${what}${where}. The mask has probably hung. Switch it off for a minute (or put it on a charger for a minute), ` +
+      'switch it on and reconnect. Nothing more was sent to it.',
+    );
     this.inbox.length = 0;
     await this.cmd('DATS', [total >> 8, total & 255, slot >> 8, slot & 255, 1]);
-    await this.waitFor('DATSOK');
+    await this.waitFor('DATSOK').catch(() => {
+      throw stalled(this.connected ? "The mask didn't accept the upload" : 'The mask disconnected');
+    });
 
     const packets = Math.ceil(total / 98);
     let counter = 0;
+    let acked = false; // has this mask acknowledged any packet of this upload?
+    let misses = 0;
     for (let off = 0; off < total; off += 98) {
       const chunk = rgb.subarray(off, off + 98);
       const pkt = new Uint8Array(100);
@@ -266,16 +306,32 @@ export class MaskClient {
       await this.uploadChar.writeValueWithoutResponse(pkt);
       if (counter % 20 === 0 || counter === packets - 1) this.trace('→', `packet ${counter + 1}/${packets}`);
       counter++;
-      // Not every firmware acks each packet; fall back to a short pause.
-      await this.waitFor('REOK', 1000).catch(() => {
-        this.trace('i', `no REOK for packet ${counter}, continuing`);
-        return sleep(100);
-      });
+      try {
+        await this.waitFor('REOK', 1000);
+        acked = true;
+        misses = 0;
+      } catch {
+        if (!this.connected) throw stalled(`The mask disconnected at packet ${counter} of ${packets}`);
+        if (!acked) {
+          // A firmware that never acks packets: fall back to a short pause.
+          this.trace('i', `no REOK for packet ${counter}, continuing`);
+          await sleep(100);
+        } else if (++misses >= STALL_MISSES) {
+          // It was acking and then went silent: stop instead of pushing more data at it.
+          this.trace('i', `no REOK for ${misses} packets in a row, stopping`);
+          throw stalled(`The mask stopped answering at packet ${counter} of ${packets}`);
+        } else {
+          this.trace('i', `no REOK for packet ${counter} (${misses}/${STALL_MISSES})`);
+        }
+      }
       onProgress(Math.min(1, (off + 98) / total));
     }
 
     const t = Math.floor(Date.now() / 1000);
     await this.cmd('DATCP', [(t >>> 24) & 255, (t >>> 16) & 255, (t >>> 8) & 255, t & 255]);
-    await this.waitFor('DATCPOK');
+    await this.waitFor('DATCPOK').catch((e) => {
+      if (acked) throw stalled("The mask didn't confirm the finished upload");
+      throw e;
+    });
   }
 }

@@ -45,7 +45,7 @@ function log(msg, kind = 'info') {
 }
 
 const HINTS = {
-  NotFoundError: 'No device was chosen or none was found. Make sure the mask is on and close the Shining app, then try again.',
+  NotFoundError: 'No mask was chosen or found. Try, in order: close the official Shining app and other Mask Cast tabs; turn Bluetooth off and on; switch the mask off for a minute (or put it on a charger for a minute) and on again; then retry. "Scan all devices" lists everything nearby.',
   SecurityError: 'Bluetooth was blocked. It needs HTTPS and a tap on the button.',
   NetworkError: 'Could not connect: the mask is out of range, or another phone/app is already connected to it.',
   NotSupportedError: 'This browser or phone does not support that Bluetooth operation.',
@@ -54,6 +54,7 @@ const HINTS = {
 };
 
 function explain(e) {
+  if (e.userFacing) return e.message; // already says what happened and what to do
   const hint = HINTS[e.name];
   return `${e.name}: ${e.message}${hint ? `\nHint: ${hint}` : ''}`;
 }
@@ -309,12 +310,16 @@ async function sendImages(imgs) {
   try {
     await mask.ensureConnected(); // only ever reconnects the already-verified mask
     await mask.setLight(+$('bright').value);
+    // Show a built-in picture first, so the mask isn't playing the DIY slots we
+    // are about to overwrite.
+    await mask.showBuiltIn(1);
+    await new Promise((r) => setTimeout(r, 300));
     const slots = imgs.map((_, i) => SLOT_START + i);
     for (let i = 0; i < imgs.length; i++) {
       log(`Uploading frame ${i + 1}/${imgs.length}`);
       await mask.uploadImage(slots[i], toMaskBytes(imgs[i], layoutCfg), (p) => {
         prog.value = (i + p) / imgs.length;
-      });
+      }, { frame: i + 1, frames: imgs.length });
     }
     await mask.play(slots);
     log('Playing on mask');

@@ -40,6 +40,13 @@ Pick a file, paste a link, or copy an image and press **Load** with the box empt
 ## Phone
 Use **Chrome** on Android. Samsung Internet shows no Bluetooth chooser; the app shows an "Open in Chrome" banner there. Turn on Bluetooth and Location, and allow Chrome the Location / Nearby devices permission.
 
+## If the mask goes dark or disappears
+If an upload is interrupted, the mask's processor can hang: the LEDs go dark and it stops answering, even though Bluetooth may still connect. The app now stops within a couple of seconds when that happens (instead of pushing more data at it) and says so. To recover, without removing the battery:
+1. Close Mask Cast and the official Shining app (it reconnects in the background and can keep the mask busy), then turn Bluetooth off and on on your phone/laptop.
+2. Switch the mask off and leave it off for at least a minute. If it has a USB charge port, put it on a charger for about a minute, unplug, then switch it on. Check its manual or listing for a reset button.
+3. When it shows up again, reconnect and send a short (about 3-frame) GIF first.
+4. If it never appears in the Bluetooth list again (check with a scanner app such as nRF Connect) and nothing lights up after charging, contact the seller.
+
 ## Limits
 - One loop holds at most 10 frames (`PLAY` command limit). Frames are picked evenly across the clip.
 - Playback speed is set by the mask firmware.
