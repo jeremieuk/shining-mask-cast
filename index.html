@@ -31,6 +31,9 @@
   #browserBanner a { color:var(--accent); }
   select { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
   .hint-inline { color:var(--muted); font-size:12px; }
+  .tools { display:flex; gap:8px; margin-top:10px; }
+  .tools button { flex:1; width:auto; margin:0; padding:10px 4px; font-size:14px; }
+  button.on { background:var(--accent); color:#000; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
   summary { cursor:pointer; }
   #url { flex:1; min-width:0; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
@@ -78,7 +81,15 @@
   <input id="posX" type="range" min="-46" max="46" step="0.5" value="0">
   <label>Up &harr; down: <span id="posYVal">0</span></label>
   <input id="posY" type="range" min="-58" max="58" step="0.5" value="0">
-  <button id="viewReset" class="secondary" style="margin-top:10px">Reset position &amp; size</button>
+  <label>Rotate: <span id="rotVal">0&deg;</span> <span class="hint-inline">(clockwise)</span></label>
+  <input id="rot" type="range" min="-180" max="180" step="1" value="0">
+  <div class="tools">
+    <button id="rotL" class="secondary" title="Rotate 90&deg; anticlockwise">&#10226; 90&deg;</button>
+    <button id="rotR" class="secondary" title="Rotate 90&deg; clockwise">&#10227; 90&deg;</button>
+    <button id="flipH" class="secondary" aria-pressed="false" title="Mirror left &harr; right">Flip &harr;</button>
+    <button id="flipV" class="secondary" aria-pressed="false" title="Mirror top &harr; bottom">Flip &varr;</button>
+  </div>
+  <button id="viewReset" class="secondary" style="margin-top:10px">Reset framing</button>
   <label>Preview style</label>
   <select id="style">
     <option value="mask">Mask (LED look)</option>
@@ -119,8 +130,8 @@
     <option value="cols">Columns (default)</option>
     <option value="rows">Rows</option>
   </select>
-  <label class="row"><input id="flipX" type="checkbox"> Flip left &harr; right</label>
-  <label class="row"><input id="flipY" type="checkbox"> Flip top &harr; bottom</label>
+  <label class="row"><input id="flipX" type="checkbox"> Fix mask: flip left &harr; right</label>
+  <label class="row"><input id="flipY" type="checkbox"> Fix mask: flip top &harr; bottom</label>
   <label>Colour order</label>
   <select id="colors">
     <option value="RGB">RGB (default)</option>

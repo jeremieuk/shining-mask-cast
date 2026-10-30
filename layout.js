@@ -21,20 +21,35 @@ export function gammaLut(gamma = 1) {
 // mode 'full'  : cover the whole grid (crops overflow; eye-hole pixels are lost)
 // mode 'below' : contain inside the area under the eye line
 // The user's framing on top of the base fit: scale multiplies the fitted size
-// (1 = as fitted), x/y shift the picture in mask pixels (+x right, +y down).
-export const DEFAULT_VIEW = { scale: 1, x: 0, y: 0 };
+// (1 = as fitted), x/y shift the picture in mask pixels (+x right, +y down), rot
+// turns it clockwise in degrees, and flipX/flipY mirror it as seen on the mask.
+// Flipping mirrors the turn direction, so the UI negates rot whenever a flip is
+// toggled; that keeps a flip an exact mirror of the current view and rot always
+// meaning "clockwise as seen". The drawn transform is flip(fx,fy) after rotate(rot*fx*fy).
+export const DEFAULT_VIEW = { scale: 1, x: 0, y: 0, rot: 0, flipX: false, flipY: false };
 
-// Where a source of srcW x srcH is drawn, and the box it is clipped to.
+// Where a source of srcW x srcH is drawn, and the box it is clipped to. (x, y, w, h)
+// is the unrotated rectangle; cx, cy is its centre, which angle/flipX/flipY pivot about.
 export function fitRect(srcW, srcH, mode, eyeLine = EYE_LINE_Y, view = DEFAULT_VIEW) {
   const top = mode === 'below' ? eyeLine : 0;
   const box = { x: 0, y: top, w: WIDTH, h: HEIGHT - top };
-  const base = (mode === 'below' ? Math.min : Math.max)(box.w / srcW, box.h / srcH);
+  const theta = ((view.rot ?? 0) * Math.PI) / 180;
+  const c = Math.abs(Math.cos(theta));
+  const s = Math.abs(Math.sin(theta));
+  // Base fit of the *rotated* picture: cover the box (full) or fit inside it (below).
+  // At 0 degrees these are exactly the plain cover/contain scales.
+  const base = mode === 'below'
+    ? Math.min(box.w / (srcW * c + srcH * s), box.h / (srcW * s + srcH * c))
+    : Math.max((2 * ((box.w / 2) * c + (box.h / 2) * s)) / srcW, (2 * ((box.w / 2) * s + (box.h / 2) * c)) / srcH);
   const scale = base * Math.max(0.05, view.scale);
   const w = srcW * scale;
   const h = srcH * scale;
   const cx = box.x + box.w / 2 + view.x;
   const cy = box.y + box.h / 2 + view.y;
-  return { x: cx - w / 2, y: cy - h / 2, w, h, box };
+  const flipX = !!view.flipX;
+  const flipY = !!view.flipY;
+  const angle = theta * (flipX === flipY ? 1 : -1);
+  return { x: cx - w / 2, y: cy - h / 2, w, h, cx, cy, angle, flipX, flipY, box };
 }
 
 export function renderFrame(src, mode, eyeLine = EYE_LINE_Y, view = DEFAULT_VIEW) {
@@ -46,7 +61,14 @@ export function renderFrame(src, mode, eyeLine = EYE_LINE_Y, view = DEFAULT_VIEW
   ctx.beginPath();
   ctx.rect(r.box.x, r.box.y, r.box.w, r.box.h);
   ctx.clip();
-  ctx.drawImage(src, r.x, r.y, r.w, r.h);
+  if (r.angle === 0 && !r.flipX && !r.flipY) {
+    ctx.drawImage(src, r.x, r.y, r.w, r.h); // untouched pictures keep the exact old rendering path
+  } else {
+    ctx.translate(r.cx, r.cy);
+    ctx.scale(r.flipX ? -1 : 1, r.flipY ? -1 : 1);
+    ctx.rotate(r.angle);
+    ctx.drawImage(src, -r.w / 2, -r.h / 2, r.w, r.h);
+  }
   ctx.restore();
 
   return ctx.getImageData(0, 0, WIDTH, HEIGHT);

@@ -383,6 +383,12 @@ function syncViewUi() {
   $('sizeVal').textContent = `${$('size').value}%`;
   $('posXVal').textContent = signed(view.x);
   $('posYVal').textContent = signed(view.y);
+  $('rot').value = view.rot;
+  $('rotVal').textContent = `${signed(view.rot)}°`;
+  for (const [id, on] of [['flipH', view.flipX], ['flipV', view.flipY]]) {
+    $(id).classList.toggle('on', on);
+    $(id).setAttribute('aria-pressed', String(on));
+  }
 }
 function resetView() {
   Object.assign(view, DEFAULT_VIEW);
@@ -391,6 +397,31 @@ function resetView() {
 $('size').oninput = () => { view.scale = +$('size').value / 100; syncViewUi(); relayout(); };
 $('posX').oninput = () => { view.x = +$('posX').value; syncViewUi(); relayout(); };
 $('posY').oninput = () => { view.y = +$('posY').value; syncViewUi(); relayout(); };
+$('rot').oninput = () => { view.rot = +$('rot').value; syncViewUi(); relayout(); };
+const turn = (deg) => {
+  let r = view.rot + deg;
+  if (r > 180) r -= 360;
+  if (r < -180) r += 360;
+  view.rot = r;
+  syncViewUi();
+  relayout();
+};
+$('rotL').onclick = () => turn(-90);
+$('rotR').onclick = () => turn(90);
+// A flip mirrors what you see on the mask. Mirroring reverses which way a turn
+// looks, so the angle is negated too: the slider then keeps meaning "clockwise as seen".
+$('flipH').onclick = () => {
+  view.flipX = !view.flipX;
+  view.rot = view.rot ? -view.rot : 0;
+  syncViewUi();
+  relayout();
+};
+$('flipV').onclick = () => {
+  view.flipY = !view.flipY;
+  view.rot = view.rot ? -view.rot : 0;
+  syncViewUi();
+  relayout();
+};
 $('viewReset').onclick = () => { resetView(); relayout(); };
 $('style').onchange = () => {
   store.set('previewStyle', $('style').value);
