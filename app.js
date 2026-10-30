@@ -4,6 +4,7 @@ import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT } from './
 import { renderMaskPreview, PREVIEW_W, PREVIEW_H, CELL, PAD } from './preview.js';
 import { MaskClient } from './mask.js';
 import { extractUrl, normalizeUrl } from './link.js';
+import { fetchBlob, LoadError, mb } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_TRACE = 500;
@@ -20,12 +21,27 @@ function trace(dir, text) {
   el.scrollTop = el.scrollHeight;
 }
 
-// User-facing messages (also recorded in the diagnostics log).
-function log(msg) {
+// A slim message floating at the top of the screen showing the latest message, so
+// nothing happens silently off-screen. It doesn't move the page, errors stay a
+// little longer, and a tap dismisses it.
+let noteTimer;
+function setNote(msg, kind) {
+  const el = $('note');
+  el.textContent = msg;
+  el.className = `note ${kind}`;
+  el.hidden = false;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { el.hidden = true; }, kind === 'error' ? 20000 : 8000);
+}
+$('note').onclick = () => { $('note').hidden = true; };
+
+// User-facing messages (also recorded in the log below and the diagnostics log).
+function log(msg, kind = 'info') {
   const el = $('log');
   el.textContent += `${msg}\n`;
   el.scrollTop = el.scrollHeight;
   trace('i', msg.replace(/\n\s*/g, ' '));
+  setNote(msg, kind);
 }
 
 const HINTS = {
@@ -145,19 +161,76 @@ function showPattern() {
   drawPreview();
 }
 
-async function loadFile(f) {
-  file = f;
-  sources = [];
-  $('name').textContent = f.name || f.type;
-  updateUi();
-  try {
-    sources = await extractFrames(f, +$('frames').value);
-    log(`Loaded ${sources.length} frame(s)`);
-    relayout();
-  } catch (e) {
-    log(`Error: ${e.message}`);
+// Loading: one load at a time. Starting a new one cancels the one in flight, and
+// every step has a deadline, so Load can't hang silently.
+let loadCtl = null; // AbortController of the load in flight
+
+const CORS_MSG = "Couldn't read that link. The site probably blocks other apps from reading it (or you are offline). Try a Giphy or Imgur link, or download it and choose the file.";
+
+function loadStatus(text, kind = '') {
+  const el = $('loadStatus');
+  el.textContent = text;
+  el.className = `status ${kind}`;
+  el.hidden = !text;
+}
+
+function beginLoad() {
+  loadCtl?.abort();
+  loadCtl = new AbortController();
+  $('loadUrl').textContent = 'Cancel';
+  return loadCtl;
+}
+
+function endLoad(ctl) {
+  if (loadCtl !== ctl) return;
+  loadCtl = null;
+  $('loadUrl').textContent = 'Load';
+}
+
+function reportLoadError(e, ctl) {
+  if (e.cancelled) {
+    if (loadCtl === ctl) loadStatus('Cancelled'); // user cancelled; a newer load stays silent
+    return;
   }
-  updateUi();
+  const msg = e instanceof TypeError ? CORS_MSG : e.message;
+  loadStatus(msg, 'error');
+  log(msg, 'error');
+}
+
+const framesLabel = (n) => `Loaded ${n} frame${n === 1 ? '' : 's'}`;
+
+// Decodes a picture or video into frames and shows it. Previous frames stay on
+// screen (and Send stays usable) until the new ones are ready.
+async function decode(f, ctl) {
+  loadStatus('Decoding…');
+  const frames = await extractFrames(f, +$('frames').value, {
+    signal: ctl.signal,
+    onProgress: (i, n) => loadStatus(`Decoding frame ${i} of ${n}…`),
+  });
+  if (loadCtl !== ctl) {
+    frames.forEach((b) => b.close());
+    throw new LoadError('Cancelled', true);
+  }
+  sources.forEach((b) => b.close());
+  sources = frames;
+  file = f;
+  $('name').textContent = f.name || f.type;
+  relayout();
+  return frames.length;
+}
+
+async function loadFile(f) {
+  const ctl = beginLoad();
+  try {
+    const n = await decode(f, ctl);
+    loadStatus(framesLabel(n), 'ok');
+    log(framesLabel(n));
+  } catch (e) {
+    reportLoadError(e, ctl);
+  } finally {
+    endLoad(ctl);
+    updateUi();
+  }
 }
 
 async function connect(opts) {
@@ -175,7 +248,7 @@ async function connect(opts) {
     await mask.connect(opts);
     log('Mask connected and verified');
   } catch (e) {
-    log(explain(e));
+    log(explain(e), 'error');
   } finally {
     clearTimeout(hintTimer);
     busy = false;
@@ -185,22 +258,34 @@ async function connect(opts) {
 
 async function loadUrl(raw) {
   const url = normalizeUrl(raw);
-  if (!/^https?:\/\//i.test(url)) {
-    log('Enter a full link starting with http:// or https://');
+  if (!url) {
+    loadStatus('Paste a link first', 'error');
     return;
   }
+  if (!/^https?:\/\//i.test(url)) {
+    loadStatus('Enter a full link starting with http:// or https://', 'error');
+    return;
+  }
+  const ctl = beginLoad();
   log(`Fetching ${url}`);
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    if (!/^(image|video)\//.test(blob.type)) throw new Error(`Not an image or video (${blob.type || 'unknown type'})`);
+    loadStatus('Connecting…');
+    const blob = await fetchBlob(url, {
+      signal: ctl.signal,
+      onProgress: (got, total) => loadStatus(total ? `Downloading ${mb(got)} of ${mb(total)} MB…` : `Downloading ${mb(got)} MB…`),
+    });
+    if (!/^(image|video)\//.test(blob.type)) {
+      throw new LoadError(`That link is not an image or video (${blob.type || 'unknown type'}). Use a direct link to the GIF or video file.`);
+    }
     const name = url.split('?')[0].split('/').pop() || 'link';
-    await loadFile(new File([blob], name, { type: blob.type }));
+    const n = await decode(new File([blob], name, { type: blob.type }), ctl);
+    loadStatus(framesLabel(n), 'ok');
+    log(framesLabel(n));
   } catch (e) {
-    log(e instanceof TypeError
-      ? "Couldn't read that link. The site probably blocks other apps from reading it. Try a Giphy or Imgur link, or download it and choose the file."
-      : `Error: ${e.message}`);
+    reportLoadError(e, ctl);
+  } finally {
+    endLoad(ctl);
+    updateUi();
   }
 }
 
@@ -223,7 +308,7 @@ async function sendImages(imgs) {
     await mask.play(slots);
     log('Playing on mask');
   } catch (e) {
-    log(explain(e));
+    log(explain(e), 'error');
   } finally {
     if (!$('stay').checked) mask.disconnect();
     prog.hidden = true;
@@ -281,7 +366,10 @@ $('style').onchange = () => {
   redraw();
 };
 $('pattern').onchange = showPattern;
-$('loadUrl').onclick = () => loadUrl($('url').value);
+$('loadUrl').onclick = () => {
+  if (loadCtl) loadCtl.abort(); // the button reads "Cancel" while a load is running
+  else loadUrl($('url').value);
+};
 // Not `onkeydown = (e) => e.key === 'Enter' && ...`: an on* handler that returns
 // false cancels the keystroke, which blocked typing, deleting and Ctrl+V.
 $('url').addEventListener('keydown', (e) => {

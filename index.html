@@ -22,6 +22,12 @@
   canvas { display:block; width:100%; max-width:300px; margin:8px auto; }
   progress { width:100%; }
   #status { font-weight:600; }
+  /* Floats over the page (no layout shift, so buttons never move under your finger); tap to dismiss. */
+  .note { position:fixed; top:8px; left:50%; transform:translateX(-50%); width:min(448px, calc(100% - 32px)); z-index:10; margin:0; padding:8px 12px; background:#2a2a2a; border:1px solid #444; border-radius:10px; font-size:14px; white-space:pre-line; box-shadow:0 2px 10px rgba(0,0,0,.5); cursor:pointer; }
+  .note.error { border-color:#ff6b6b; color:#ffb4b4; }
+  .status { margin:6px 0 0; font-size:13px; color:var(--muted); white-space:pre-line; }
+  .status.error { color:#ff8a8a; }
+  .status.ok { color:#5ad17a; }
   #browserBanner a { color:var(--accent); }
   select { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
@@ -33,6 +39,8 @@
 </head>
 <body>
 <h1>Mask Cast <small id="ver" style="color:var(--muted);font-size:12px"></small></h1>
+
+<div id="note" class="note" hidden></div>
 
 <div id="browserBanner" class="card" hidden>
   <strong>Bluetooth only works in Chrome.</strong> This browser can't talk to the mask.
@@ -51,8 +59,9 @@
   <button id="pick" class="secondary">Choose GIF / video</button>
   <div class="row" style="margin-top:8px">
     <input id="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="...or paste a GIF / video link">
-    <button id="loadUrl" class="secondary" style="width:auto;margin:0">Load</button>
+    <button id="loadUrl" class="secondary" style="width:auto;margin:0;min-width:84px">Load</button>
   </div>
+  <div id="loadStatus" class="status" hidden></div>
   <canvas id="preview" width="588" height="732"></canvas>
   <div id="name" style="text-align:center;color:var(--muted);font-size:14px">Nothing loaded</div>
 </div>

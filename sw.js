@@ -1,10 +1,10 @@
 // Network-first for app files (so updates show up immediately), falling back to
 // the cache when offline. Bump CACHE if the file list changes.
-const CACHE = 'mask-cast-v8';
+const CACHE = 'mask-cast-v9';
 const SHARE_CACHE = 'mask-cast-share';
 const ASSETS = [
   './', './index.html', './app.js', './config.js', './frames.js', './layout.js',
-  './mask.js', './mask-shape.js', './preview.js', './link.js', './manifest.webmanifest',
+  './mask.js', './mask-shape.js', './preview.js', './link.js', './net.js', './manifest.webmanifest',
   './icon-192.png', './icon-512.png',
 ];
 
