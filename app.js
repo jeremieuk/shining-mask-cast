@@ -1,6 +1,6 @@
 import { WIDTH, HEIGHT, SLOT_START, APP_VERSION, EYE_LINE_Y } from './config.js';
 import { extractFrames } from './frames.js';
-import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT } from './layout.js';
+import { renderFrame, toMaskBytes, calibrationPattern, DEFAULT_LAYOUT, DEFAULT_VIEW } from './layout.js';
 import { renderMaskPreview, PREVIEW_W, PREVIEW_H, CELL, PAD } from './preview.js';
 import { MaskClient } from './mask.js';
 import { extractUrl, normalizeUrl } from './link.js';
@@ -77,10 +77,19 @@ const store = {
 };
 
 // Pixel order / flips / colour order used when sending (saved on this device).
-const layoutCfg = { ...DEFAULT_LAYOUT, gamma: 1.8 };
+const MAX_GAMMA = 2.6; // maximum contrast, and the default
+const layoutCfg = { ...DEFAULT_LAYOUT, gamma: MAX_GAMMA };
 try {
-  Object.assign(layoutCfg, JSON.parse(store.get('layout') ?? '{}'));
+  const saved = JSON.parse(store.get('layout') ?? '{}');
+  delete saved.gamma; // gamma has its own key now; older saves held 1.8 and would hide the default
+  Object.assign(layoutCfg, saved);
 } catch { /* ignore a corrupt saved value */ }
+const savedGamma = parseFloat(store.get('gamma'));
+if (Number.isFinite(savedGamma)) layoutCfg.gamma = Math.min(MAX_GAMMA, Math.max(1, savedGamma));
+
+// How the picture is framed on the mask: size multiplier and shift in mask pixels.
+// Reset whenever a new picture is loaded; not saved between visits.
+const view = { ...DEFAULT_VIEW };
 
 function updateUi() {
   const name = mask.device?.name ?? 'unnamed';
@@ -143,7 +152,7 @@ function redraw() {
 
 function relayout() {
   showing = 'file';
-  rendered = sources.length ? sources.map((s) => renderFrame(s, mode(), eyeLine())) : [blankImage()];
+  rendered = sources.length ? sources.map((s) => renderFrame(s, mode(), eyeLine(), view)) : [blankImage()];
   frameIdx = 0;
   clearInterval(animTimer);
   drawPreview();
@@ -213,7 +222,9 @@ async function decode(f, ctl) {
   }
   sources.forEach((b) => b.close());
   sources = frames;
+  const isNewPicture = f !== file; // re-extracting the same file (Frames slider) keeps your framing
   file = f;
+  if (isNewPicture) resetView();
   $('name').textContent = f.name || f.type;
   relayout();
   return frames.length;
@@ -351,16 +362,36 @@ const saveLayout = () => {
   layoutCfg.flipX = $('flipX').checked;
   layoutCfg.flipY = $('flipY').checked;
   layoutCfg.colors = $('colors').value;
-  layoutCfg.gamma = +$('gamma').value;
-  store.set('layout', JSON.stringify(layoutCfg));
+  const { gamma, ...rest } = layoutCfg; // gamma is saved separately
+  store.set('layout', JSON.stringify(rest));
   trace('i', `layout: ${JSON.stringify(layoutCfg)}`);
 };
 ['order', 'flipX', 'flipY', 'colors'].forEach((id) => ($(id).onchange = saveLayout));
 $('gamma').oninput = () => {
-  $('gVal').textContent = Number($('gamma').value).toFixed(1);
-  saveLayout();
+  layoutCfg.gamma = +$('gamma').value;
+  $('gVal').textContent = layoutCfg.gamma.toFixed(1);
+  store.set('gamma', String(layoutCfg.gamma));
   redraw();
 };
+
+// Size and position sliders.
+const signed = (n) => (n > 0 ? `+${n}` : String(n));
+function syncViewUi() {
+  $('size').value = Math.round(view.scale * 100);
+  $('posX').value = view.x;
+  $('posY').value = view.y;
+  $('sizeVal').textContent = `${$('size').value}%`;
+  $('posXVal').textContent = signed(view.x);
+  $('posYVal').textContent = signed(view.y);
+}
+function resetView() {
+  Object.assign(view, DEFAULT_VIEW);
+  syncViewUi();
+}
+$('size').oninput = () => { view.scale = +$('size').value / 100; syncViewUi(); relayout(); };
+$('posX').oninput = () => { view.x = +$('posX').value; syncViewUi(); relayout(); };
+$('posY').oninput = () => { view.y = +$('posY').value; syncViewUi(); relayout(); };
+$('viewReset').onclick = () => { resetView(); relayout(); };
 $('style').onchange = () => {
   store.set('previewStyle', $('style').value);
   redraw();
@@ -413,7 +444,7 @@ document.addEventListener('paste', (e) => {
     log('Clipboard has no link, image or video');
   } // else: let a normal paste into the box happen
 });
-$('send').onclick = () => sendImages(sources.map((s) => renderFrame(s, mode(), eyeLine())));
+$('send').onclick = () => sendImages(sources.map((s) => renderFrame(s, mode(), eyeLine(), view)));
 $('test').onclick = () => {
   showPattern();
   sendImages([currentPattern()]);
@@ -474,5 +505,6 @@ if (new URLSearchParams(location.search).has('shared')) {
   })();
 }
 
+syncViewUi();
 relayout(); // shows the empty mask until something is loaded
 updateUi();

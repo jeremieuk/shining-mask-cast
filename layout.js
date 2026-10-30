@@ -20,22 +20,33 @@ export function gammaLut(gamma = 1) {
 
 // mode 'full'  : cover the whole grid (crops overflow; eye-hole pixels are lost)
 // mode 'below' : contain inside the area under the eye line
-export function renderFrame(src, mode, eyeLine = EYE_LINE_Y) {
+// The user's framing on top of the base fit: scale multiplies the fitted size
+// (1 = as fitted), x/y shift the picture in mask pixels (+x right, +y down).
+export const DEFAULT_VIEW = { scale: 1, x: 0, y: 0 };
+
+// Where a source of srcW x srcH is drawn, and the box it is clipped to.
+export function fitRect(srcW, srcH, mode, eyeLine = EYE_LINE_Y, view = DEFAULT_VIEW) {
+  const top = mode === 'below' ? eyeLine : 0;
+  const box = { x: 0, y: top, w: WIDTH, h: HEIGHT - top };
+  const base = (mode === 'below' ? Math.min : Math.max)(box.w / srcW, box.h / srcH);
+  const scale = base * Math.max(0.05, view.scale);
+  const w = srcW * scale;
+  const h = srcH * scale;
+  const cx = box.x + box.w / 2 + view.x;
+  const cy = box.y + box.h / 2 + view.y;
+  return { x: cx - w / 2, y: cy - h / 2, w, h, box };
+}
+
+export function renderFrame(src, mode, eyeLine = EYE_LINE_Y, view = DEFAULT_VIEW) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  const top = mode === 'below' ? eyeLine : 0;
-  const boxW = WIDTH;
-  const boxH = HEIGHT - top;
-  const scale = (mode === 'below' ? Math.min : Math.max)(boxW / src.width, boxH / src.height);
-  const w = src.width * scale;
-  const h = src.height * scale;
-
+  const r = fitRect(src.width, src.height, mode, eyeLine, view);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, top, boxW, boxH);
+  ctx.rect(r.box.x, r.box.y, r.box.w, r.box.h);
   ctx.clip();
-  ctx.drawImage(src, (boxW - w) / 2, top + (boxH - h) / 2, w, h);
+  ctx.drawImage(src, r.x, r.y, r.w, r.h);
   ctx.restore();
 
   return ctx.getImageData(0, 0, WIDTH, HEIGHT);

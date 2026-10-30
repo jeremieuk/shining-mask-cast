@@ -30,6 +30,7 @@
   .status.ok { color:#5ad17a; }
   #browserBanner a { color:var(--accent); }
   select { width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
+  .hint-inline { color:var(--muted); font-size:12px; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
   summary { cursor:pointer; }
   #url { flex:1; min-width:0; padding:10px; border-radius:10px; border:1px solid #333; background:#111; color:var(--fg); font-size:16px; }
@@ -71,6 +72,13 @@
     <label><input type="radio" name="mode" value="full" checked> Full mask</label>
     <label><input type="radio" name="mode" value="below"> Below the eyes</label>
   </div>
+  <label>Size: <span id="sizeVal">100%</span> <span class="hint-inline">(100% fills the area)</span></label>
+  <input id="size" type="range" min="20" max="300" step="1" value="100">
+  <label>Left &harr; right: <span id="posXVal">0</span></label>
+  <input id="posX" type="range" min="-46" max="46" step="0.5" value="0">
+  <label>Up &harr; down: <span id="posYVal">0</span></label>
+  <input id="posY" type="range" min="-58" max="58" step="0.5" value="0">
+  <button id="viewReset" class="secondary" style="margin-top:10px">Reset position &amp; size</button>
   <label>Preview style</label>
   <select id="style">
     <option value="mask">Mask (LED look)</option>
@@ -82,8 +90,8 @@
   <input id="frames" type="range" min="1" max="10" value="10">
   <label>Brightness: <span id="bVal">50</span></label>
   <input id="bright" type="range" min="10" max="128" value="50">
-  <label>Contrast (gamma): <span id="gVal">1.8</span></label>
-  <input id="gamma" type="range" min="1" max="2.6" step="0.1" value="1.8">
+  <label>Contrast (gamma): <span id="gVal">2.6</span></label>
+  <input id="gamma" type="range" min="1" max="2.6" step="0.1" value="2.6">
   <p class="hint">The mask's LEDs are brighter in the mid-tones than a screen, which flattens contrast. Raise this if the mask looks washed out. The preview shows the effect.</p>
   <label class="row"><input id="stay" type="checkbox"> Stay connected after sending</label>
 </div>
